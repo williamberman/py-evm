@@ -29,7 +29,7 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python :: 3.6',
     ],
-    python_requires=">=3.6,<4"
+    python_requires=">=3.6,<4",
     # trinity
     entry_points={
         'console_scripts': ['trinity=trinity:main'],
