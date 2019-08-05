@@ -20,7 +20,6 @@ from eth_typing import (
 from eth_utils.toolz import nth
 
 from eth.constants import (
-    BLANK_ROOT_HASH,
     MAX_PREV_HEADER_DEPTH,
 )
 from eth.db.account import (
@@ -29,7 +28,6 @@ from eth.db.account import (
 from eth.db.backends.base import (
     BaseAtomicDB,
 )
-from eth.exceptions import StateRootNotFound
 from eth.tools.logging import (
     ExtendedDebugLogger,
 )
@@ -304,20 +302,6 @@ class BaseState(Configurable, ABC):
     #
     # Execution
     #
-    def apply_transaction(
-            self,
-            transaction: BaseOrSpoofTransaction) -> 'BaseComputation':
-        """
-        Apply transaction to the vm state
-
-        :param transaction: the transaction to apply
-        :return: the computation
-        """
-        if self.state_root != BLANK_ROOT_HASH and not self._account_db.has_root(self.state_root):
-            raise StateRootNotFound(self.state_root)
-        else:
-            return self.execute_transaction(transaction)
-
     def get_transaction_executor(self) -> 'BaseTransactionExecutor':
         return self.transaction_executor(self)
 
@@ -325,7 +309,7 @@ class BaseState(Configurable, ABC):
                                      transaction: BaseOrSpoofTransaction) -> 'BaseComputation':
         with self.override_transaction_context(gas_price=transaction.gas_price):
             free_transaction = transaction.copy(gas_price=0)
-            return self.execute_transaction(free_transaction)
+            return self.apply_transaction(free_transaction)
 
     @contextlib.contextmanager
     def override_transaction_context(self, gas_price: int) -> Iterator[None]:
@@ -340,10 +324,6 @@ class BaseState(Configurable, ABC):
             yield
         finally:
             self.get_transaction_context = original_context     # type: ignore # Remove ignore if https://github.com/python/mypy/issues/708 is fixed. # noqa: E501
-
-    @abstractmethod
-    def execute_transaction(self, transaction: BaseOrSpoofTransaction) -> 'BaseComputation':
-        raise NotImplementedError()
 
     @abstractmethod
     def validate_transaction(self, transaction: BaseOrSpoofTransaction) -> None:
