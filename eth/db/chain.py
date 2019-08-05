@@ -22,6 +22,9 @@ from eth_utils import (
 )
 
 from eth_hash.auto import keccak
+from trie.exceptions import (
+    MissingTrieNode,
+)
 
 from eth.constants import (
     EMPTY_UNCLE_HASH,
@@ -212,8 +215,13 @@ class ChainDB(HeaderDB, BaseChainDB):
             else:
                 old_header = cls._get_block_header_by_hash(db, old_hash)
                 old_canonical_headers.append(old_header)
-                for transaction_hash in cls._get_block_transaction_hashes(db, old_header):
-                    cls._remove_transaction_from_canonical_chain(db, transaction_hash)
+                try:
+                    for transaction_hash in cls._get_block_transaction_hashes(db, old_header):
+                        cls._remove_transaction_from_canonical_chain(db, transaction_hash)
+                except MissingTrieNode:
+                    # If the transactions were never stored for the (now) non-canonical chain,
+                    #   then you don't need to remove them from the canonical chain lookup.
+                    pass
 
         for h in new_canonical_headers:
             cls._add_block_number_to_hash_lookup(db, h)
