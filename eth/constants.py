@@ -79,6 +79,7 @@ GAS_CODEDEPOSIT = 200
 
 GAS_MEMORY_QUADRATIC_DENOMINATOR = 512
 
+MAX_REFUND_QUOTIENT = 2
 
 #
 # Pre-compile contract gas costs

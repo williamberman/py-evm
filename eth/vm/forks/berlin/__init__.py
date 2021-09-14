@@ -9,6 +9,9 @@ from eth.abc import (
     SignedTransactionAPI,
     StateAPI,
 )
+from eth.constants import (
+    MAX_REFUND_QUOTIENT,
+)
 from eth.rlp.blocks import BaseBlock
 from eth.vm.forks import (
     MuirGlacierVM,
@@ -28,17 +31,6 @@ from .headers import (
 from .state import BerlinState
 
 
-def finalize_gas_used(transaction: SignedTransactionAPI, computation: ComputationAPI) -> int:
-    gas_remaining = computation.get_gas_remaining()
-    consumed_gas = transaction.gas - gas_remaining
-
-    gross_refund = computation.get_gas_refund()
-    max_refund = consumed_gas // 2
-    gas_refund = min(gross_refund, max_refund)
-
-    return consumed_gas - gas_refund
-
-
 class BerlinVM(MuirGlacierVM):
     # fork name
     fork = 'berlin'
@@ -52,14 +44,34 @@ class BerlinVM(MuirGlacierVM):
     compute_difficulty = staticmethod(compute_berlin_difficulty)    # type: ignore
     configure_header = configure_berlin_header
 
-    @staticmethod
+    @classmethod
+    def calculate_net_gas_refund(cls, consumed_gas: int, gross_refund: int) -> int:
+        max_refund = consumed_gas // MAX_REFUND_QUOTIENT
+        return min(max_refund, gross_refund)
+
+    @classmethod
+    def finalize_gas_used(
+            cls,
+            transaction: SignedTransactionAPI,
+            computation: ComputationAPI) -> int:
+
+        gas_remaining = computation.get_gas_remaining()
+        consumed_gas = transaction.gas - gas_remaining
+
+        gross_refund = computation.get_gas_refund()
+        net_refund = cls.calculate_net_gas_refund(consumed_gas, gross_refund)
+
+        return consumed_gas - net_refund
+
+    @classmethod
     def make_receipt(
+            cls,
             base_header: BlockHeaderAPI,
             transaction: SignedTransactionAPI,
             computation: ComputationAPI,
             state: StateAPI) -> ReceiptAPI:
 
-        gas_used = base_header.gas_used + finalize_gas_used(transaction, computation)
+        gas_used = base_header.gas_used + cls.finalize_gas_used(transaction, computation)
 
         if computation.is_error:
             status_code = EIP658_TRANSACTION_STATUS_CODE_FAILURE
