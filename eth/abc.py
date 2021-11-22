@@ -49,6 +49,7 @@ from eth.typing import (
     VMConfiguration,
 )
 
+import z3
 
 T = TypeVar('T')
 
@@ -1466,6 +1467,12 @@ class MemoryAPI(ABC):
 
 
 class StackAPI(ABC):
+    @abstractmethod
+    def push_symbolic_int(self, value: z3.Int) -> None:
+        """
+        Push a symbolic integer item onto the stack.
+        """
+        ...
     """
     A class representing the stack of the :class:`~eth.abc.VirtualMachineAPI`.
     """

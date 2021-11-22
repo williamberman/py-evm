@@ -1,5 +1,6 @@
 from eth.vm.computation import BaseComputation
 
+# TODO here -- will, these will then push symbolic values onto the stack
 
 def blockhash(computation: BaseComputation) -> None:
     block_number = computation.stack_pop1_int()

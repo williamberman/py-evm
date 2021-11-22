@@ -13,6 +13,7 @@ from eth.validation import (
     validate_canonical_address,
     validate_is_bytes,
     validate_is_bytes_or_view,
+    validate_is_bytes_or_view_or_symbolic,
     validate_is_integer,
     validate_gte,
     validate_uint256,
@@ -53,7 +54,7 @@ class Message(MessageAPI):
         validate_uint256(value, title="Message.value")
         self.value = value
 
-        validate_is_bytes_or_view(data, title="Message.data")
+        validate_is_bytes_or_view_or_symbolic(data, title="Message.data")
         self.data = data
 
         validate_is_integer(depth, title="Message.depth")

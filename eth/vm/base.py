@@ -83,6 +83,8 @@ from eth.vm.message import (
     Message,
 )
 
+import pdb
+import z3
 
 class VM(Configurable, VirtualMachineAPI):
     block_class: Type[BlockAPI] = None
@@ -196,6 +198,32 @@ class VM(Configurable, VirtualMachineAPI):
                 chain_id=chain_context.chain_id,
                 base_fee_per_gas=base_fee,
             )
+
+    def sym_execute_bytecode(self, *args, **kwargs):
+        computations = []
+
+        c = self.execute_bytecode(*args, **kwargs)
+        computations.append(c)
+        
+        fork = c.pop_fork()
+
+        while fork is not None:
+            computations.append(fork)
+            fork.__class__.xapply_computation(fork)
+            fork = c.pop_fork()
+
+        satisfied = []
+
+        for cc in computations:
+            sol = z3.Solver()
+
+            for ccc in cc.constraints:
+                sol.add(ccc)
+
+            if sol.check() == z3.sat:
+                satisfied.append(sol)
+
+        return satisfied
 
     def execute_bytecode(self,
                          origin: Address,

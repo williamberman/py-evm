@@ -55,6 +55,15 @@ def validate_is_bytes_or_view(value: BytesOrView, title: str = "Value") -> None:
         f"{title} must be bytes or memoryview. Got {type(value)}"
     )
 
+def validate_is_bytes_or_view_or_symbolic(value, title: str = "Value") -> None:
+    if isinstance(value, (bytes, memoryview)):
+        return
+    elif value.sort().name() == 'bv':
+        return
+    raise ValidationError(
+        f"{title} must be bytes or memoryview. Got {type(value)}"
+    )
+
 
 def validate_is_integer(value: Union[int, bool], title: str = "Value") -> None:
     if not isinstance(value, int) or isinstance(value, bool):
@@ -179,6 +188,10 @@ def validate_stack_int(value: int) -> None:
         "Invalid Stack Item: Must be a 256 bit integer. Got {value!r}"
     )
 
+def validate_stack_symbolic_int(value) -> None:
+    # TODO
+    pass
+
 
 def validate_stack_bytes(value: bytes) -> None:
     if len(value) <= 32:
@@ -186,6 +199,10 @@ def validate_stack_bytes(value: bytes) -> None:
     raise ValidationError(
         "Invalid Stack Item: Must be either a length 32 byte string. Got {value!r}"
     )
+
+def validate_stack_symbolic_bytes(value) -> None:
+    # TODO
+    pass
 
 
 validate_lt_secpk1n = functools.partial(validate_lte, maximum=SECPK1_N - 1)

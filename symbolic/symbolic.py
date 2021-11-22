@@ -1,0 +1,155 @@
+from eth.constants import CREATE_CONTRACT_ADDRESS
+from eth_utils import setup_DEBUG2_logging
+
+setup_DEBUG2_logging()
+
+from eth.chains.base import MiningChain
+from eth.tools.builder.chain import api
+from eth.vm.forks.london import LondonVM
+from eth_utils import to_canonical_address
+from eth_typing import Address
+from eth_utils import decode_hex
+import pdb
+
+import sys
+import logging
+from eth import constants
+
+import z3
+from eth.vm.logic.symbolic import *
+
+logging.basicConfig(stream=sys.stdout, level=8)
+
+# TODO will probably need to run starting directly at function call
+
+# `solc --bin-runtime ./PrimalityCheck.sol`
+bin_runtime = decode_hex("0x608060405234801561001057600080fd5b506004361061002b5760003560e01c8063d5a2424914610030575b600080fd5b61004a600480360381019061004591906100df565b61004c565b005b81600110801561005e5750620ed8d582105b801561006a5750806001105b80156100785750620ed8d581105b61008157600080fd5b620ed8d58183610091919061014e565b14156100a05761009f6101a8565b5b5050565b600080fd5b6000819050919050565b6100bc816100a9565b81146100c757600080fd5b50565b6000813590506100d9816100b3565b92915050565b600080604083850312156100f6576100f56100a4565b5b6000610104858286016100ca565b9250506020610115858286016100ca565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b6000610159826100a9565b9150610164836100a9565b9250817fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff048311821515161561019d5761019c61011f565b5b828202905092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052600160045260246000fdfea26469706673582212202c667a96599f0a0921c5454871e3ebdb6434748a412b3bf97324ce0d32ec5fe864736f6c63430008090033")
+# `solc --bin ./PrimalityCheck.sol`
+bin = decode_hex("0x608060405234801561001057600080fd5b5061020d806100206000396000f3fe608060405234801561001057600080fd5b506004361061002b5760003560e01c8063d5a2424914610030575b600080fd5b61004a600480360381019061004591906100df565b61004c565b005b81600110801561005e5750620ed8d582105b801561006a5750806001105b80156100785750620ed8d581105b61008157600080fd5b620ed8d58183610091919061014e565b14156100a05761009f6101a8565b5b5050565b600080fd5b6000819050919050565b6100bc816100a9565b81146100c757600080fd5b50565b6000813590506100d9816100b3565b92915050565b600080604083850312156100f6576100f56100a4565b5b6000610104858286016100ca565b9250506020610115858286016100ca565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b6000610159826100a9565b9150610164836100a9565b9250817fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff048311821515161561019d5761019c61011f565b5b828202905092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052600160045260246000fdfea26469706673582212202c667a96599f0a0921c5454871e3ebdb6434748a412b3bf97324ce0d32ec5fe864736f6c63430008090033")
+
+# xbin_runtime = decode_hex("608060405234801561001057600080fd5b506004361061002b5760003560e01c8063d5a2424914610030575b600080fd5b61004a600480360381019061004591906100de565b61004c565b005b81600110801561005e5750620ed8d582105b801561006a5750806001105b80156100785750620ed8d581105b61008157600080fd5b620ed8d58183610091919061014d565b1461009f5761009e6101a7565b5b5050565b600080fd5b6000819050919050565b6100bb816100a8565b81146100c657600080fd5b50565b6000813590506100d8816100b2565b92915050565b600080604083850312156100f5576100f46100a3565b5b6000610103858286016100c9565b9250506020610114858286016100c9565b9150509250929050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b6000610158826100a8565b9150610163836100a8565b9250817fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff048311821515161561019c5761019b61011e565b5b828202905092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052600160045260246000fdfea26469706673582212207dc1ea2ac6d60728977b7e0084a03926511b89e1d4bb36cff4f2fa4bed7c5db064736f6c63430008090033")
+
+# JS
+"""
+import { Interface } from "@ethersproject/abi";
+import { BigNumber } from "@ethersproject/bignumber";
+
+const ABI = new Interface([
+    'function factor(uint x, uint y) public pure'
+])
+
+const data = ABI.encodeFunctionData('factor', [
+    BigNumber.from('1021'),
+    BigNumber.from('953')
+])
+
+const xdata = ABI.encodeFunctionData('factor', [
+    BigNumber.from('1022'),
+    BigNumber.from('953')
+])
+
+console.log(data)
+console.log(xdata)
+"""
+# This will fail because 1021*953 == 973013
+calldata = decode_hex("0xd5a2424900000000000000000000000000000000000000000000000000000000000003fd00000000000000000000000000000000000000000000000000000000000003b9")
+# This will not fail because 1022*953 != 973013
+xcalldata = decode_hex("0xd5a2424900000000000000000000000000000000000000000000000000000000000003fe00000000000000000000000000000000000000000000000000000000000003b9")
+
+import z3
+
+# 4 byte function selector
+# NOTE(will) -- at some point, this val will be directly compared for equality in the function selector code
+sel = z3.BitVecVal(0xd5a24249, 4*8)
+
+# 2 32 byte arguments
+args = z3.BitVec('args', 32*2*8)
+
+# symbolic calldata
+xxcalldata = z3.Concat(sel, args)
+
+
+# s = z3.Solver()
+# 
+# res = z3.BitVec('res', 4*8)
+# 
+# # TODO HERE we need to know how to index into extract
+# length=32
+# start=0
+# 
+# end = xxcalldata.sort().size() - start - 1
+# xstart = end - length + 1
+# # s.add(res == z3.Extract(4*8, 1, xsel))
+# s.add(res == z3.Extract(end, xstart, xxcalldata))
+# 
+# s.check()
+# s.model()
+
+
+
+vm_class = LondonVM
+
+chain = api.build(
+    MiningChain,
+    api.fork_at(vm_class, 0),
+    api.disable_pow_check(),
+    api.genesis(params=dict(gas_limit=100000)),
+)
+
+vm = chain.get_vm()
+
+canonical_address_a = to_canonical_address("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
+
+def vm_example():
+    ccs = vm.sym_execute_bytecode(
+        # Just executing code. This arrangement of environment is fine.
+        origin=canonical_address_a,
+        to=canonical_address_a,
+        sender=canonical_address_a,
+
+        code=bin_runtime,
+        # data=calldata,
+        # data=xcalldata,
+        data=xxcalldata,
+
+        value=0,
+        gas=40000,
+        gas_price=1,
+    )
+
+    x = z3.Extract(511, 256, args)
+    y = z3.Extract(255, 0, args)
+
+    pdb.set_trace()
+
+
+    # cc.return_data
+    # cc.gas_used
+
+def z3_example():
+    s = z3.Solver()
+    x = z3.Int("x")
+    y = z3.Int("y")
+    s.add(1 < x)
+    s.add(x < 973013)
+    s.add(1 < y)
+    s.add(y < 973013)
+    s.add(x * y == 973013)
+    s.add(x * y < constants.UINT_256_MAX)
+
+    print(s.check())
+    print(s.model())
+
+from eth import constants
+
+def z3_example2():
+    pdb.set_trace()
+
+vm_example()
+# z3_example2()
+
+
+# lt_result_0 == 1
+# lt_result_1 == 1
+# lt_result_2 == 1
+# lt_result_3 == 1

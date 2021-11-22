@@ -66,6 +66,7 @@ def test_CREATE_and_CREATE2_resets_return_data_if_account_has_insufficient_funds
 
     assert state.get_balance(canonical_address_a) == 0
 
+    # TODO HERE -- this is how to _just_ execute bytecode
     computation = vm.execute_bytecode(
         origin=canonical_address_a,
         to=canonical_address_a,

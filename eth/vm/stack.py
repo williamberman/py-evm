@@ -18,10 +18,15 @@ from eth.exceptions import (
 from eth.validation import (
     validate_stack_bytes,
     validate_stack_int,
+    validate_stack_symbolic_bytes,
+    validate_stack_symbolic_int,
 )
 
 from eth.abc import StackAPI
 
+import z3
+
+import copy
 
 def _busted_type(item_type: type, value: Union[int, bytes]) -> ValidationError:
     return ValidationError(
@@ -45,14 +50,29 @@ class Stack(StackAPI):
     #   and converting only when necessary.
     #
 
-    def __init__(self) -> None:
-        values: List[Tuple[type, Union[int, bytes]]] = []
+    def __init__(self, values_=None) -> None:
+        values: List[Tuple[type, Union[int, bytes, z3.Int]]] = []
+        if values_ is not None:
+            values = values_
+
         self.values = values
+
         # caching optimizations to avoid an attribute lookup on self.values
         # This doesn't use `cached_property`, because it doesn't play nice with slots
         self._append = values.append
         self._pop_typed = values.pop
         self.__len__ = values.__len__
+
+    def copy(self) -> 'Stack':
+        return Stack(values_=copy.deepcopy(self.values))
+
+    def push_symbolic_int(self, value) -> None:
+        if len(self.values) > 1023:
+            raise FullStack('Stack limit reached')
+
+        validate_stack_symbolic_int(value)
+
+        self._append((z3.Int, value))
 
     def push_int(self, value: int) -> None:
         if len(self.values) > 1023:
@@ -69,6 +89,14 @@ class Stack(StackAPI):
         validate_stack_bytes(value)
 
         self._append((bytes, value))
+
+    def push_symbolic_bytes(self, value) -> None:
+        if len(self.values) > 1023:
+            raise FullStack('Stack limit reached')
+
+        validate_stack_symbolic_bytes(value)
+
+        self._append((z3.BitVec, value))
 
     def pop1_bytes(self) -> bytes:
         #
@@ -101,6 +129,23 @@ class Stack(StackAPI):
                 return big_endian_to_int(popped)  # type: ignore
             else:
                 raise _busted_type(item_type, popped)
+
+    def pop1_symbolic_int(self):
+        if not self.values:
+            raise InsufficientStack("Wanted 1 stack item as int, had none")
+        else:
+            item_type, popped = self._pop_typed()
+            if item_type is int:
+                return popped  # type: ignore
+            elif item_type is bytes:
+                return big_endian_to_int(popped)  # type: ignore
+            elif item_type is z3.Int:
+                return popped  # type: ignore
+            elif item_type is z3.BitVec:
+                return popped  # type: ignore
+            else:
+                raise _busted_type(item_type, popped)
+
 
     def pop1_any(self) -> Union[int, bytes]:
         #
@@ -158,6 +203,10 @@ class Stack(StackAPI):
                     type_cast_popped.append(popped)
                 elif item_type is bytes:
                     type_cast_popped.append(big_endian_to_int(popped))  # type: ignore
+                elif item_type is z3.Int:
+                    type_cast_popped.append(popped)
+                elif item_type is z3.BitVec:
+                    type_cast_popped.append(popped)
                 else:
                     raise _busted_type(item_type, popped)
 
@@ -216,8 +265,16 @@ class Stack(StackAPI):
                 yield hex(val)
             elif isinstance(val, bytes):
                 yield "0x" + val.hex()
+            elif item_type is z3.Int:
+                yield f"symbolic<{str(val)}>"
+            elif item_type is z3.BitVec:
+                yield f"symbolic<{str(val)}>"
             else:
                 raise RuntimeError(f"Stack items can only be int or bytes, not {val!r}:{item_type}")
 
     def __str__(self) -> str:
         return str(list(self._stack_items_str()))
+
+# TODO HERE
+class SymbolicStack(StackAPI):
+    pass

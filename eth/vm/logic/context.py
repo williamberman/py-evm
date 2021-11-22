@@ -22,6 +22,10 @@ from eth._utils.numeric import (
 
 from eth.vm.computation import BaseComputation
 
+from eth.vm.logic.symbolic import *
+import z3
+import pdb
+
 
 def balance(computation: BaseComputation) -> None:
     addr = force_bytes_to_address(computation.stack_pop1_bytes())
@@ -29,6 +33,7 @@ def balance(computation: BaseComputation) -> None:
 
 
 def selfbalance(computation: BaseComputation) -> None:
+    # TODO HERE the msg should have symbolic properties
     push_balance_of_address(computation.msg.storage_address, computation)
 
 
@@ -38,6 +43,7 @@ def push_balance_of_address(address: Address, computation: ComputationAPI) -> No
 
 
 def origin(computation: BaseComputation) -> None:
+    # TODO HERE the transaction context should have symbolic properties
     computation.stack_push_bytes(computation.transaction_context.origin)
 
 
@@ -65,9 +71,49 @@ def calldataload(computation: BaseComputation) -> None:
 
     computation.stack_push_bytes(normalized_value)
 
+def sym_calldataload(computation: BaseComputation) -> None:
+    """
+    Symbolic load call data into memory.
+    """
+    if isinstance(computation.msg.data, (bytes, memoryview)):
+        calldataload(computation)
+        return
+
+    start_position = computation.stack_pop1_int()
+
+    # start_position is usually given as if we are addressing by bytes
+    # but we're addressing by bits.
+    start_position *= 8
+
+    length = 32*8
+
+    end = computation.msg.data.sort().size() - start_position - 1
+    xstart_position = end - length + 1
+    value = ssym(z3.Extract(end, xstart_position, computation.msg.data))
+
+    if isinstance(value, int):
+        # TODO should probably have this padding logic in the symbolic case as well.
+        # However, at least for this example we do not deal with the selector part of
+        # the calldata being symbolic.
+        value = value.to_bytes(4, 'big')
+        padded_value = value.ljust(32, b'\x00')
+        normalized_value = padded_value.lstrip(b'\x00')
+        computation.stack_push_bytes(normalized_value)
+        pdb.set_trace()
+        return
+
+    computation.stack_push_symbolic_bytes(value)
+
+
 
 def calldatasize(computation: BaseComputation) -> None:
-    size = len(computation.msg.data)
+    # The length in bytes of the call data
+    if hasattr(computation.msg.data, '__len__'):
+        size = len(computation.msg.data)
+    else:
+        # assume is symbolic bit vec
+        # bits -> bytes
+        size = computation.msg.data.sort().size() // 8
     computation.stack_push_int(size)
 
 

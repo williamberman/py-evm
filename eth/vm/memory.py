@@ -13,13 +13,20 @@ from eth._utils.numeric import (
 )
 from eth.abc import MemoryAPI
 
+import copy
 
 class Memory(MemoryAPI):
     __slots__ = ['_bytes']
     logger = logging.getLogger('eth.vm.memory.Memory')
 
-    def __init__(self) -> None:
-        self._bytes = bytearray()
+    def __init__(self, bytes=None) -> None:
+        if bytes is None:
+            self._bytes = bytearray()
+        else:
+            self._bytes = bytes
+
+    def copy(self) -> 'Memory':
+        return Memory(bytes=copy.deepcopy(self._bytes))
 
     def extend(self, start_position: int, size: int) -> None:
         if size == 0:
@@ -60,3 +67,8 @@ class Memory(MemoryAPI):
 
     def read_bytes(self, start_position: int, size: int) -> bytes:
         return bytes(self._bytes[start_position:start_position + size])
+
+
+# TODO HERE
+class SymbolicMemory(MemoryAPI):
+    pass

@@ -40,14 +40,31 @@ class GasMeter(GasMeterAPI):
 
     def __init__(self,
                  start_gas: int,
-                 refund_strategy: RefundStrategy = default_refund_strategy) -> None:
+                 refund_strategy: RefundStrategy = default_refund_strategy,
+                 gas_remaining=None,
+                 gas_refunded=None) -> None:
         validate_uint256(start_gas, title="Start Gas")
 
         self.refund_strategy = refund_strategy
         self.start_gas = start_gas
 
-        self.gas_remaining = self.start_gas
-        self.gas_refunded = 0
+        if gas_remaining is None:
+            self.gas_remaining = self.start_gas
+        else:
+            self.gas_remaining = gas_remaining
+
+        if gas_refunded is None:
+            self.gas_refunded = 0
+        else:
+            self.gas_refunded = gas_refunded
+
+    def copy(self) -> 'GasMeter':
+        return GasMeter(
+            self.start_gas,
+            refund_strategy=self.refund_strategy,
+            gas_remaining=self.gas_remaining,
+            gas_refunded=self.gas_refunded
+        )
 
     #
     # Write API

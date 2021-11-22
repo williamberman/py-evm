@@ -37,7 +37,7 @@ UPDATED_OPCODES = {
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.SHR: as_opcode(
-        logic_fn=arithmetic.shr,
+        logic_fn=arithmetic.sym_shr,
         mnemonic=mnemonics.SHR,
         gas_cost=constants.GAS_VERYLOW,
     ),

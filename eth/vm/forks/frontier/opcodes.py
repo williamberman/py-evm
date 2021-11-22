@@ -41,7 +41,7 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.MUL: as_opcode(
-        logic_fn=arithmetic.mul,
+        logic_fn=arithmetic.sym_mul,
         mnemonic=mnemonics.MUL,
         gas_cost=constants.GAS_LOW,
     ),
@@ -51,7 +51,7 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.DIV: as_opcode(
-        logic_fn=arithmetic.div,
+        logic_fn=arithmetic.sym_div,
         mnemonic=mnemonics.DIV,
         gas_cost=constants.GAS_LOW,
     ),
@@ -94,12 +94,12 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
     # Comparisons
     #
     opcode_values.LT: as_opcode(
-        logic_fn=comparison.lt,
+        logic_fn=comparison.sym_lt,
         mnemonic=mnemonics.LT,
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.GT: as_opcode(
-        logic_fn=comparison.gt,
+        logic_fn=comparison.sym_gt,
         mnemonic=mnemonics.GT,
         gas_cost=constants.GAS_VERYLOW,
     ),
@@ -114,17 +114,17 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.EQ: as_opcode(
-        logic_fn=comparison.eq,
+        logic_fn=comparison.sym_eq,
         mnemonic=mnemonics.EQ,
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.ISZERO: as_opcode(
-        logic_fn=comparison.iszero,
+        logic_fn=comparison.sym_iszero,
         mnemonic=mnemonics.ISZERO,
         gas_cost=constants.GAS_VERYLOW,
     ),
     opcode_values.AND: as_opcode(
-        logic_fn=comparison.and_op,
+        logic_fn=comparison.sym_and_op,
         mnemonic=mnemonics.AND,
         gas_cost=constants.GAS_VERYLOW,
     ),
@@ -185,7 +185,7 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
         gas_cost=constants.GAS_BASE,
     ),
     opcode_values.CALLDATALOAD: as_opcode(
-        logic_fn=context.calldataload,
+        logic_fn=context.sym_calldataload,
         mnemonic=mnemonics.CALLDATALOAD,
         gas_cost=constants.GAS_VERYLOW,
     ),
@@ -296,7 +296,7 @@ FRONTIER_OPCODES: Dict[int, OpcodeAPI] = {
         gas_cost=constants.GAS_MID,
     ),
     opcode_values.JUMPI: as_opcode(
-        logic_fn=flow.jumpi,
+        logic_fn=flow.sym_jumpi,
         mnemonic=mnemonics.JUMPI,
         gas_cost=constants.GAS_HIGH,
     ),

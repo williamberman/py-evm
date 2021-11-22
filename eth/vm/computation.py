@@ -1,3 +1,4 @@
+from copy import deepcopy
 import itertools
 from types import TracebackType
 from typing import (
@@ -73,6 +74,10 @@ from eth.vm.stack import (
     Stack,
 )
 
+import z3
+import pdb
+import copy
+
 
 def NO_RESULT(computation: ComputationAPI) -> None:
     """
@@ -130,25 +135,139 @@ class BaseComputation(Configurable, ComputationAPI):
 
     logger = get_extended_debug_logger('eth.vm.computation.Computation')
 
+    constraints = None
+    forks = None
+    symgens = None
+
     def __init__(self,
                  state: StateAPI,
                  message: MessageAPI,
-                 transaction_context: TransactionContextAPI) -> None:
+                 transaction_context: TransactionContextAPI,
+                 memory=None,
+                 stack=None,
+                 gas_meter=None,
+                 children=None,
+                 accounts_to_delete=None,
+                 log_entries=None,
+                 code=None,
+                 constraints=None,
+                 forks=None,
+                 symgens=None
+                 ) -> None:
 
         self.state = state
         self.msg = message
         self.transaction_context = transaction_context
 
-        self._memory = Memory()
-        self._stack = Stack()
-        self._gas_meter = self.get_gas_meter()
+        if memory is None:
+            self._memory = Memory()
+        else:
+            self._memory = memory
 
-        self.children = []
-        self.accounts_to_delete = {}
-        self._log_entries = []
+        if stack is None:
+            self._stack = Stack()
+        else:
+            self._stack = stack
 
-        code = message.code
-        self.code = CodeStream(code)
+        if gas_meter is None:
+            self._gas_meter = self.get_gas_meter()
+        else:
+            self._gas_meter = gas_meter
+
+        if children is None:
+            self.children = []
+        else:
+            self.children = children
+
+        if accounts_to_delete is None:
+            self.accounts_to_delete = {}
+        else:
+            self.accounts_to_delete = accounts_to_delete
+
+        if log_entries is None:
+            self._log_entries = []
+        else:
+            self._log_entries = log_entries
+
+        if code is None:
+            self.code = CodeStream(message.code)
+        else:
+            self.code = code
+
+        if constraints is None:
+            self.constraints = []
+        else:
+            self.constraints = constraints
+
+        if forks is None:
+            self.forks = []
+        else:
+            self.forks = forks
+
+        if symgens is None:
+            self.symgens = {}
+        else:
+            self.symgens = symgens
+
+    # Make a fork of the current computation. The fork should snapshot
+    # the current computation so the fork can effectively continue this point later in time.
+    #
+    # All forks share the same `symbolic_forks` list so that there are not separate "collection"s of
+    # forks. Just all of the forks are accumulated together.
+    #
+    # py-evm was not built with forking in-mind so we have to carefully copy the class's state
+    # over
+    def fork(self):
+        snapshot = self.state.snapshot()
+        fork = self.copy()
+        self.forks.append((fork, snapshot))
+        return fork
+
+    def copy(self):
+        return self.__class__(
+            # `self.state` cannot be trivially copied. We have to take a `snapshot`
+            # of it and `revert` to the snapshot in `pop_fork`
+            self.state,
+            # `self.msg` is not mutated and can be directly passed
+            self.msg,
+
+            self.transaction_context.copy(),
+            memory=self._memory.copy(),
+            stack=self._stack.copy(),
+            gas_meter=self._gas_meter.copy(),
+
+            # These are readonly once they're set in the parent. Just copy w/out forking since
+            # we don't intend to execute them anymore.
+            children=[child.copy() for child in self.children],
+
+            accounts_to_delete=copy.deepcopy(self.accounts_to_delete),
+            log_entries=copy.deepcopy(self._log_entries),
+            code=self.code.copy(),
+            constraints=copy.deepcopy(self.constraints),
+
+            # No copy -- we want all to share same list. See `self.forks` doc strings
+            forks=self.forks,
+
+            symgens=copy.deepcopy(self.symgens)
+        )
+    
+    def symgen(self, s):
+        if s not in self.symgens:
+            self.symgens[s] = 0
+
+        rv = self.symgens[s]
+
+        self.symgens[s] += 1
+
+        return f"{s}_{rv}"
+
+    def pop_fork(self):
+        if len(self.forks) == 0:
+            return None
+
+        fork, snapshot = self.forks.pop()
+        fork.state.revert(snapshot)
+        return fork
 
     #
     # Convenience
@@ -307,6 +426,10 @@ class BaseComputation(Configurable, ComputationAPI):
         return self._stack.pop1_int
 
     @cached_property
+    def stack_pop1_symbolic_int(self):
+        return self._stack.pop1_symbolic_int
+
+    @cached_property
     def stack_pop1_bytes(self) -> Callable[[], bytes]:
         return self._stack.pop1_bytes
 
@@ -321,6 +444,14 @@ class BaseComputation(Configurable, ComputationAPI):
     @cached_property
     def stack_push_bytes(self) -> Callable[[bytes], None]:
         return self._stack.push_bytes
+
+    @cached_property
+    def stack_push_symbolic_bytes(self) -> Callable[[bytes], None]:
+        return self._stack.push_symbolic_bytes
+
+    @cached_property
+    def stack_push_symbolic_int(self) -> Callable[[z3.Int], None]:
+        return self._stack.push_symbolic_int
 
     #
     # Computation result
@@ -493,6 +624,15 @@ class BaseComputation(Configurable, ComputationAPI):
             if self.should_erase_return_data:
                 self.return_data = b''
 
+            # self.output
+            # s = b'NH{q\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01'
+            # if self.output == s:
+            #     s = z3.Solver()
+            #     for c in self.constraints:
+            #         s.add(c)
+            #     c = s.check()
+            #     pdb.set_trace()
+
             # suppress VM exceptions
             return True
         elif exc_type is None and self.logger.show_debug2:
@@ -527,31 +667,41 @@ class BaseComputation(Configurable, ComputationAPI):
                 precompile(computation)
                 return computation
 
+            cls.exec_computation(computation)
+        return computation
+
+    @classmethod
+    def xapply_computation(cls, c):
+        with c as computation:
+            cls.exec_computation(computation)
+        return computation
+
+    @classmethod
+    def exec_computation(cls, computation):
+        opcode_lookup = computation.opcodes
+        for opcode in computation.code:
+            try:
+                opcode_fn = opcode_lookup[opcode]
+            except KeyError:
+                opcode_fn = InvalidOpcode(opcode)
+
             show_debug2 = computation.logger.show_debug2
 
-            opcode_lookup = computation.opcodes
-            for opcode in computation.code:
-                try:
-                    opcode_fn = opcode_lookup[opcode]
-                except KeyError:
-                    opcode_fn = InvalidOpcode(opcode)
+            if show_debug2:
+                # We dig into some internals for debug logs
+                base_comp = cast(BaseComputation, computation)
+                computation.logger.debug2(
+                    "OPCODE: 0x%x (%s) | pc: %s | stack: %s",
+                    opcode,
+                    opcode_fn.mnemonic,
+                    max(0, computation.code.program_counter - 1),
+                    base_comp._stack,
+                )
 
-                if show_debug2:
-                    # We dig into some internals for debug logs
-                    base_comp = cast(BaseComputation, computation)
-                    computation.logger.debug2(
-                        "OPCODE: 0x%x (%s) | pc: %s | stack: %s",
-                        opcode,
-                        opcode_fn.mnemonic,
-                        max(0, computation.code.program_counter - 1),
-                        base_comp._stack,
-                    )
-
-                try:
-                    opcode_fn(computation=computation)
-                except Halt:
-                    break
-        return computation
+            try:
+                opcode_fn(computation=computation)
+            except Halt:
+                break
 
     #
     # Opcode API

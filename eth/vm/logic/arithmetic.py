@@ -12,6 +12,9 @@ from eth._utils.numeric import (
 
 from eth.vm.computation import BaseComputation
 
+import pdb
+import z3
+from eth.vm.logic.symbolic import *
 
 def add(computation: BaseComputation) -> None:
     """
@@ -82,15 +85,33 @@ def smod(computation: BaseComputation) -> None:
     computation.stack_push_int(signed_to_unsigned(result))
 
 
-def mul(computation: BaseComputation) -> None:
+def mul(computation: BaseComputation, left=None, right=None) -> None:
     """
     Multiplication
     """
-    left, right = computation.stack_pop_ints(2)
+    if left is None and right is None:
+        left, right = computation.stack_pop_ints(2)
+
+    if left is None or right is None:
+        assert False
 
     result = (left * right) & constants.UINT_256_MAX
 
     computation.stack_push_int(result)
+
+def sym_mul(computation: BaseComputation) -> None:
+    """
+    Symbolic Multiplication
+    """
+    left, right = computation.stack_pop_ints(2)
+
+    if isinstance(left, int) and isinstance(right, int):
+        mul(computation, left=left, right=right)
+        return
+
+    result = (left * right) & constants.UINT_256_MAX
+
+    computation.stack_push_symbolic_int(result)
 
 
 def mulmod(computation: BaseComputation) -> None:
@@ -106,11 +127,15 @@ def mulmod(computation: BaseComputation) -> None:
     computation.stack_push_int(result)
 
 
-def div(computation: BaseComputation) -> None:
+def div(computation: BaseComputation, numerator=None, denominator=None) -> None:
     """
     Division
     """
-    numerator, denominator = computation.stack_pop_ints(2)
+    if numerator is None and denominator is None:
+        numerator, denominator = computation.stack_pop_ints(2)
+
+    if numerator is None or denominator is None:
+        assert False
 
     if denominator == 0:
         result = 0
@@ -118,6 +143,30 @@ def div(computation: BaseComputation) -> None:
         result = (numerator // denominator) & constants.UINT_256_MAX
 
     computation.stack_push_int(result)
+
+def sym_div(computation: BaseComputation) -> None:
+    """
+    Symbolic Division
+    """
+    numerator, denominator = computation.stack_pop_ints(2)
+
+    if isinstance(numerator, int) and isinstance(denominator, int):
+        div(computation, numerator=numerator, denominator=denominator)
+        return
+
+    cond = denominator == 0
+    result = z3.BitVec(computation.symgen('div_result'), 256)
+
+    computation.constraints.append(
+        z3.Implies(cond, result == 0)
+    )
+
+    computation.constraints.append(
+        # TODO(will): Probably not exactly correct
+        z3.Implies(z3.Not(cond), result == numerator / denominator)
+    )
+
+    computation.stack_push_symbolic_int(result)
 
 
 def sdiv(computation: BaseComputation) -> None:
@@ -197,11 +246,15 @@ def shl(computation: BaseComputation) -> None:
     computation.stack_push_int(result)
 
 
-def shr(computation: BaseComputation) -> None:
+def shr(computation: BaseComputation, shift_length=None, value=None) -> None:
     """
     Bitwise right shift
     """
-    shift_length, value = computation.stack_pop_ints(2)
+    if shift_length is None and value is None:
+        shift_length, value = computation.stack_pop_ints(2)
+    
+    if shift_length is None or value is None:
+        assert False
 
     if shift_length >= 256:
         result = 0
@@ -209,6 +262,36 @@ def shr(computation: BaseComputation) -> None:
         result = (value >> shift_length) & constants.UINT_256_MAX
 
     computation.stack_push_int(result)
+
+
+def sym_shr(computation: BaseComputation) -> None:
+    """
+    Symbolic Bitwise right shift
+    """
+    shift_length, value = computation.stack_pop_ints(2)
+
+    # Let's not worry about dealing with symbolic shift lengths for now
+    assert isinstance(shift_length, int)
+
+    if isinstance(value, int):
+        shr(computation, shift_length=shift_length, value=value)
+        return
+
+    if shift_length >= 256:
+        result = 0
+    else:
+        # TODO(will) `& constants.UINT_256_MAX`
+        shifted = ssym(z3.LShR(value, shift_length))
+        if isinstance(shifted, int):
+            # Short circuit. Don't need to add a constraint
+            result = shifted
+        else:
+            result = computation.symgen('shr_result')
+            computation.constraints.append(
+                result == shifted
+            )
+
+    computation.stack_push_symbolic_int(result)
 
 
 def sar(computation: BaseComputation) -> None:

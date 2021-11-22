@@ -30,6 +30,7 @@ def pow_consensus_chain(vm_class):
     )
 
 
+# TODO HERE will This is how we can get a vm
 @pytest.fixture
 def noproof_consensus_chain(vm_class):
     # This will always have the same vm configuration as the POW chain

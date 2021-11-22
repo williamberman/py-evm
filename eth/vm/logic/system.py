@@ -28,6 +28,8 @@ from eth.vm.opcode import Opcode
 
 from .call import max_child_gas_eip150
 
+import pdb
+
 
 def return_op(computation: ComputationAPI) -> None:
     start_position, size = computation.stack_pop_ints(2)
@@ -44,6 +46,7 @@ def revert(computation: ComputationAPI) -> None:
     computation.extend_memory(start_position, size)
 
     computation.output = computation.memory_read_bytes(start_position, size)
+
     raise Revert(computation.output)
 
 

@@ -15,22 +15,48 @@ from eth.vm.opcode_values import (
     STOP,
 )
 
+import copy
 
 class CodeStream(CodeStreamAPI):
     __slots__ = ['_length_cache', '_raw_code_bytes', 'invalid_positions', 'valid_positions', 'pc']
 
     logger = logging.getLogger('eth.vm.CodeStream')
 
-    def __init__(self, code_bytes: bytes) -> None:
+    def __init__(self, 
+        code_bytes: bytes, 
+        program_counter=None,
+        invalid_positions=None,
+        valid_positions=None,
+    ) -> None:
         validate_is_bytes(code_bytes, title="CodeStream bytes")
         # in order to avoid method overhead when setting/accessing pc, we no longer fence
         # the pc (Program Counter) into 0 <= pc <= len(code_bytes). We now let it float free.
         # NOTE: Setting pc to a negative value has undefined behavior.
-        self.program_counter = 0
+        if program_counter is None:
+            self.program_counter = 0
+        else:
+            self.program_counter = program_counter
+
         self._raw_code_bytes = code_bytes
         self._length_cache = len(code_bytes)
+
         self.invalid_positions: Set[int] = set()
+
+        if invalid_positions is not None:
+            self.invalid_positions = invalid_positions
+
         self.valid_positions: Set[int] = set()
+
+        if valid_positions is not None:
+            self.valid_positions = valid_positions
+
+    def copy(self) -> 'CodeStream':
+        return CodeStream(
+            copy.deepcopy(self._raw_code_bytes),
+            program_counter=self.program_counter,
+            invalid_positions=self.invalid_positions,
+            valid_positions=self.valid_positions
+        )
 
     def read(self, size: int) -> bytes:
         old_program_counter = self.program_counter
